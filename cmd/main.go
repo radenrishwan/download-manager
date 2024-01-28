@@ -22,7 +22,7 @@ func main() {
 		}
 	}()
 
-	url := "http://localhost:3000/download"
+	url := "https://cdn.discordapp.com/attachments/566486385377280001/1186878617951678464/Velocity-ArcaneMoon30.ppf?ex=659e1459&is=658b9f59&hm=10cf0ea6136a3fb015e17d3a2629a15809bb106c5d3fcfa6f14394f013730b28&"
 	log.Println("Downloading file from", url)
 	result, err := downloadmanager.GetMetaData(url)
 	if err != nil {

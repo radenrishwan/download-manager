@@ -2,6 +2,7 @@ package downloadmanager
 
 import (
 	"errors"
+	"fmt"
 	"io"
 	"log"
 	"net/http"
@@ -9,6 +10,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 )
 
 // [DownloadMetaData] is a struct that contains metadata of a url to be downloaded
@@ -37,7 +39,7 @@ func GetMetaData(url string) (DownloadMetaData, error) {
 
 	defer resp.Body.Close()
 
-	if resp.StatusCode != 200 {
+	if resp.StatusCode > 300 {
 		return DownloadMetaData{}, errors.New("could not get metadata, maybe the URL is wrong?")
 	}
 
@@ -48,6 +50,10 @@ func GetMetaData(url string) (DownloadMetaData, error) {
 
 	filename := resp.Header.Get("Content-Disposition")
 	contentType := resp.Header.Get("Content-Type")
+
+	if filename == "" {
+		filename = time.Now().String() + "." + contentType
+	}
 
 	return DownloadMetaData{
 		Url:         url,
@@ -121,6 +127,21 @@ func DownloadFile(metadata DownloadMetaData, parrarel int) error {
 	return nil
 }
 
+type writeCounter struct {
+	Filename string
+	Total    uint64
+}
+
+// Write implements the io.Writer interface.
+//
+// Always completes and never returns an error.
+func (wc *writeCounter) Write(p []byte) (int, error) {
+	n := len(p)
+	wc.Total += uint64(n)
+	fmt.Printf("Read %d bytes for a total of %d for %s\n", n, wc.Total, wc.Filename)
+	return n, nil
+}
+
 func download(result chan<- string, metadata DownloadMetaData, header rangeHeader, part int) error {
 	req, err := http.NewRequest("GET", metadata.Url, nil)
 	if err != nil {
@@ -140,21 +161,26 @@ func download(result chan<- string, metadata DownloadMetaData, header rangeHeade
 
 	}
 
-	// write into file as a byte array
-	filename := strings.Split(metadata.FileName, "=")[1] + ".part" + strconv.Itoa(part) + ".temp"
+	filename := strings.Split(metadata.FileName, "=")[1] + ".part" + strconv.Itoa(part) + ".🔥"
 
-	body, err := io.ReadAll(resp.Body)
+	file, err := os.Create(filename)
 	if err != nil {
 		return err
 	}
 
-	err = os.WriteFile(filename, []byte(string(body)), 0644)
+	src := io.TeeReader(resp.Body, &writeCounter{
+		Filename: filename,
+	})
+
+	// write file
+	_, err = io.Copy(file, src)
 	if err != nil {
 		return err
 	}
 
 	result <- filename
 
+	defer file.Close()
 	defer resp.Body.Close()
 	return nil
 }
